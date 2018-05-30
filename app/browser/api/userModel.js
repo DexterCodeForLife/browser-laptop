@@ -28,7 +28,7 @@ const notificationTypes = require('../../common/constants/notificationTypes')
 // Utils
 const urlUtil = require('../../../js/lib/urlutil')
 const urlParse = require('../../common/urlParse')
-// const roundtrip = require('./ledger').roundtrip
+const roundtrip = require('./ledger').roundtrip
 const ledgerUtil = require('../../common/lib/ledgerUtil')
 
 let foregroundP
@@ -538,7 +538,7 @@ const stopUploadingLogs = (state) => {
   return state
 }
 
-/* BEGIN: TEMPORARY */
+/* BEGIN: TEMPORARY
 const roundtrip = function (params, options, callback) {
   const server = options.server
   const client = require('https')
@@ -607,6 +607,7 @@ const uploadLogs = () => {
   if (!appStore) appStore = require('../../../js/stores/appStore')
 
   const state = appStore.getState()
+  const path = '/v1/ads/reports/' + userModelState.getAdUUID(state)
   const events = userModelState.getReportingEventQueue(state).toJS()
   const mark = underscore.last(events)
 
@@ -616,9 +617,10 @@ const uploadLogs = () => {
   }
 
   if (!mark.uuid) mark.uuid = uuidv4()
+
   roundtrip({
     method: 'PUT',
-    path: '/v1/ads/reports/' + userModelState.getAdUUID(state),
+    path: path,
     payload: {
       braveVersion: app.getVersion(),
       platform: { darwin: 'mac', win32: os.arch() === 'x32' ? 'winia32' : 'winx64' }[os.platform()] || 'linux',
@@ -632,7 +634,12 @@ const uploadLogs = () => {
     let state = appStore.getState()
 
     if (err) {
-      appActions.onUserModelLog('Event upload failed', { reason: err.toString() })
+      appActions.onUserModelLog('Event upload failed', {
+        method: 'PUT',
+        server: url.format(roundTripOptions.server),
+        path: path,
+        reason: err.toString()
+      })
 
       if (response.statusCode === 400) state = userModelState.setReportingEventQueue(state, Immutable.fromJS([]))
       return downloadSurveys()
@@ -654,13 +661,20 @@ const uploadLogs = () => {
 
 const downloadSurveys = () => {
   const state = appStore.getState()
+  const path = '/v1/ads/surveys/reporter/' + userModelState.getAdUUID(state) + '?product=ads-test'
 
   roundtrip({
     method: 'GET',
-    path: '/v1/ads/surveys/reporter/' + userModelState.getAdUUID(state) + '?product=ads-test'
+    path: path
   }, roundTripOptions, (err, response, entries) => {
-    if (err) return appActions.onUserModelLog('Survey download failed', { reason: err.toString() })
-
+    if (err) {
+      return appActions.onUserModelLog('Survey download failed', {
+        method: 'GET',
+        server: url.format(roundTripOptions.server),
+        path: path,
+        reason: err.toString()
+      })
+    }
     let state = appStore.getState()
     const surveys = userModelState.getUserSurveyQueue(state).toJS()
     entries.forEach((entry) => {
