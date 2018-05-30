@@ -7,6 +7,7 @@ const um = require('@brave-intl/bat-usermodel')
 const path = require('path')
 const getSSID = require('detect-ssid')
 const underscore = require('underscore')
+const url = require('url')
 const uuidv4 = require('uuid/v4')
 
 const app = require('electron').app
@@ -27,7 +28,7 @@ const notificationTypes = require('../../common/constants/notificationTypes')
 // Utils
 const urlUtil = require('../../../js/lib/urlutil')
 const urlParse = require('../../common/urlParse')
-const roundtrip = require('./ledger.js').roundtrip
+const roundtrip = require('./ledger').roundtrip
 const ledgerUtil = require('../../common/lib/ledgerUtil')
 
 let foregroundP
@@ -506,7 +507,7 @@ const roundTripOptions = {
   debugP: false,
   loggingP: false,
   verboseP: testingP,
-  server: require('url').parse('https://' + (testingP ? 'ads-collector-staging.brave.com' : 'ads-collector.brave.com'))
+  server: url.parse('https://' + (testingP ? 'ads-collector-staging.brave.com' : 'ads-collector.brave.com'))
 }
 
 const uploadLogsAsNeeded = (state, adEnabled) => {
