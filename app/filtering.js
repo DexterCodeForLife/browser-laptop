@@ -712,11 +712,6 @@ function shouldIgnoreUrl (details) {
   try {
     // firstPartyUrl can be empty in some cases so fallback to the url
     const firstPartyUrl = urlParse(details.firstPartyUrl || details.url)
-    if ((details.resourceType === 'other') &&
-        (details.tabId === -1) &&
-        (firstPartyUrl.host.endsWith('.brave.com') || firstPartyUrl.host.endsWith('.basicattentiontoken.org'))) {
-      return true
-    }
     if (!filterableProtocols.includes(firstPartyUrl.protocol)) {
       return true
     }

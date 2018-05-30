@@ -538,7 +538,7 @@ const stopUploadingLogs = (state) => {
   return state
 }
 
-/* BEGIN: DO NOT USE
+/* BEGIN: TEMPORARY
 const roundtrip = function (params, options, callback) {
   const server = options.server
   const client = require('https')
@@ -601,7 +601,7 @@ const roundtrip = function (params, options, callback) {
   console.log('<<<')
   if (params.payload) console.log('<<< ' + JSON.stringify(params.payload, null, 2).split('\n').join('\n<<< '))
 }
-/* END: DO NOT USE */
+/* END: TEMPORARY */
 
 const uploadLogs = () => {
   if (!appStore) appStore = require('../../../js/stores/appStore')
