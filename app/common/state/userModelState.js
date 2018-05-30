@@ -90,6 +90,14 @@ const appendToRingBufferUnderKey = (state, key, item, maxRows) => {
   return state
 }
 
+const getUserSurveyQueue = (state) => {
+  return state.getIn(['userModel', 'userSurveyQueue']) || Immutable.List()
+}
+
+const setUserSurveyQueue = (state, queue) => {
+  return state.setIn(['userModel', 'userSurveyQueue'], queue)
+}
+
 const getReportingEventQueue = (state) => {
   return state.getIn(['userModel', 'reportingEventQueue']) || Immutable.List()
 }
@@ -376,6 +384,18 @@ const userModelState = {
   setAdUUID: (state, uuid) => {
     return state.setIn(['userModel', 'adUUID'], uuid)
   },
+
+  appendToUserSurveyQueue: (state, survey) => {
+    let q = getUserSurveyQueue(state)
+
+    if (!Immutable.List.isList(q)) q = Immutable.List()
+
+    return setUserSurveyQueue(state, q.push(Immutable.Map(survey)))
+  },
+
+  getUserSurveyQueue: getUserSurveyQueue,
+
+  setUserSurveyQueue: setUserSurveyQueue,
 
   appendToReportingEventQueue: (state, evt) => {
     const wrappedEvent = Immutable.Map(evt)

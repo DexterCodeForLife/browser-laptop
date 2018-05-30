@@ -6,6 +6,7 @@
 const um = require('@brave-intl/bat-usermodel')
 const path = require('path')
 const getSSID = require('detect-ssid')
+const underscore = require('underscore')
 const uuidv4 = require('uuid/v4')
 
 const app = require('electron').app
@@ -18,6 +19,7 @@ const appActions = require('../../../js/actions/appActions')
 const userModelState = require('../../common/state/userModelState')
 const settings = require('../../../js/constants/settings')
 const getSetting = require('../../../js/settings').getSetting
+const Immutable = require('immutable')
 
 // Constants
 const notificationTypes = require('../../common/constants/notificationTypes')
@@ -25,6 +27,7 @@ const notificationTypes = require('../../common/constants/notificationTypes')
 // Utils
 const urlUtil = require('../../../js/lib/urlutil')
 const urlParse = require('../../common/urlParse')
+const roundtrip = require('./ledger.js').roundtrip
 const ledgerUtil = require('../../common/lib/ledgerUtil')
 
 let foregroundP
@@ -35,28 +38,7 @@ let sampleAdFeed
 
 let lastSingleClassification
 
-const getCoreEventPayload = (state) => {
-  const uuid = userModelState.getAdUUID(state) || 'uninitialized'
-  const version = app.getVersion()
-  const platform = { darwin: 'mac', win32: os.arch() === 'x32' ? 'winia32' : 'winx64' }[os.platform()] || 'linux'
-  const reportId = uuidv4()
-  const reportStamp = new Date().toISOString()
-
-  const payload = {
-    'browserId': uuid,
-    'braveVersion': version,
-    'platform': platform,
-    'reportId': reportId,
-    'reportStamp': reportStamp,
-    'events': []
-  }
-
-  return payload
-}
-
 const generateAdReportingEvent = (state, eventType, action) => {
-  // const payload = getCoreEventPayload(state)
-  // console.log("payload: ", payload)
   let map = {}
 
   map.type = eventType
@@ -83,7 +65,7 @@ const generateAdReportingEvent = (state, eventType, action) => {
             {
               const result = data.get('result')
               const translate = { 'clicked': 'clicked', 'closed': 'dismissed', 'ignored': 'timeout' }
-              map.notificationType = translate[result]
+              map.notificationType = translate[result] || result
               break
             }
           case notificationTypes.NOTIFICATION_CLICK:
@@ -169,6 +151,8 @@ const generateAdReportingEvent = (state, eventType, action) => {
   // console.log("q: ", q)
   // state = userModelState.flushReportingEventQueue(state)
 
+  appActions.onUserModelLog('Event logged', map)
+
   return state
 }
 
@@ -222,6 +206,7 @@ const removeHistorySite = (state, action) => {
 const removeAllHistory = (state) => {
   state = userModelState.removeAllHistory(state)
   state = confirmAdUUIDIfAdEnabled(state)
+  state = stopUploadingLogs(state)
   return state
 }
 
@@ -281,7 +266,7 @@ function randomKey (dictionary) {
   return keys[keys.length * Math.random() << 0]
 }
 
-const goAheadAndShowTheAd = (windowId, notificationTitle, notificationText, notificationUrl, uuid) => {
+const goAheadAndShowTheAd = (windowId, notificationTitle, notificationText, notificationUrl, uuid, notificationId) => {
   appActions.nativeNotificationCreate(
     windowId,
     {
@@ -295,7 +280,7 @@ const goAheadAndShowTheAd = (windowId, notificationTitle, notificationText, noti
       data: {
         windowId,
         notificationUrl,
-        notificationId: notificationTypes.ADS
+        notificationId: notificationId || notificationTypes.ADS
       }
     }
   )
@@ -368,6 +353,21 @@ const basicCheckReadyAdServe = (state, windowId) => {
     appActions.onUserModelLog('Ad throttled')
     return state
   }
+
+  const surveys = userModelState.getUserSurveyQueue(state).toJSON()
+  const survey = underscore.findWhere(surveys, { status: 'available' })
+  if (survey) {
+    survey.status = 'display'
+    survey.status_at = new Date().toISOString()
+    state = userModelState.setUserSurveyQueue(state, Immutable.fromJS(surveys))
+
+    goAheadAndShowTheAd(windowId, survey.title || 'User survey', survey.text || 'Please complete the survey', survey.url,
+                        generateAdUUIDString(), notificationTypes.SURVEYS)
+    appActions.onUserModelLog(notificationTypes.SURVEY_SHOWN, survey)
+
+    return state
+  }
+// MTR: put cut-out here to look for user survey to post instead...
 
   const bundle = sampleAdFeed
   if (!bundle) {
@@ -490,8 +490,107 @@ const confirmAdUUIDIfAdEnabled = (state) => {
   if (adEnabled) {
     state = generateAndSetAdUUIDButOnlyIfDNE(state)
   }
+  state = uploadLogsAsNeeded(state, adEnabled)
 
   return state
+}
+
+let appStore
+let uploadLogsId
+
+let testingP = process.env.NODE_ENV === 'test'
+testingP = true
+const oneDay = (testingP ? 600 : 86400) * 1000
+const oneHour = (testingP ? 25 : 3600) * 1000
+const roundTripOptions = {
+  debugP: false,
+  loggingP: false,
+  verboseP: testingP,
+  server: require('url').parse('https://' + (testingP ? 'ledger.mercury.basicattentiontoken.org' : 'ads-collector.brave.com'))
+}
+
+const uploadLogsAsNeeded = (state, adEnabled) => {
+  if (!adEnabled) return stopUploadingLogs(state)
+
+  if (uploadLogsId) return state
+
+  const mark = underscore.last(userModelState.getReportingEventQueue(state).toJSON())
+
+  let diff
+  if (!mark) diff = oneDay
+  else {
+    const now = underscore.now()
+
+    diff = now - (new Date(mark.stamp).getTime())
+    if (diff > (oneHour)) diff = oneHour
+  }
+
+  uploadLogsId = setTimeout(() => { uploadLogs() }, diff)
+  return state
+}
+
+const stopUploadingLogs = (state) => {
+  if (!uploadLogsId) return state
+
+  clearTimeout(uploadLogsId)
+  uploadLogsId = undefined
+  return state
+}
+
+const uploadLogs = () => {
+  return    // not quite yet!
+  if (!appStore) appStore = require('../../../js/stores/appStore')
+
+  const state = appStore.getState()
+  const events = userModelState.getReportingEventQueue(state).toJSON()
+  const mark = underscore.last(events)
+
+  if (!mark) {
+    if (uploadLogsId) uploadLogsId = setTimeout(() => { uploadLogs() }, oneDay)
+    return downloadSurveys()
+  }
+
+  if (!mark.uuid) mark.uuid = uuidv4()
+  roundtrip({
+    method: 'PUT',
+    path: '/v1/ads/reports/' + userModelState.getAdUUID(state),
+    payload: {
+      braveVersion: app.getVersion(),
+      platform: { darwin: 'mac', win32: os.arch() === 'x32' ? 'winia32' : 'winx64' }[os.platform()] || 'linux',
+      reportId: mark.uuid,
+      reportStamp: new Date().toISOString(),
+      events: events
+    }
+  }, roundTripOptions, (err, response, result) => {
+    if (uploadLogsId) uploadLogsId = setTimeout(() => { uploadLogs() }, err ? oneHour : oneDay)
+
+    if (err) return appActions.onUserModelLog('Event upload failed', { reason: err.toString() })
+
+    userModelState.setReportingEventQueue(state, Immutable.fromJS(underscore.filter(events, (entry) => {
+      return (entry.stamp > mark.stamp)
+    })))
+
+    return downloadSurveys()
+  })
+}
+
+const downloadSurveys = () => {
+  const state = appStore.getState()
+
+  roundtrip({
+    method: 'GET',
+    path: '/v1/ads/surveys/reporter/' + userModelState.getAdUUID(state) + '?product=ads-test'
+  }, roundTripOptions, (err, response, entries) => {
+    if (err) return appActions.onUserModelLog('Survey download failed', { reason: err.toString() })
+
+    const surveys = userModelState.getUserSurveyQueue(state).toJSON()
+    entries.forEach((entry) => {
+      if (underscore.findWhere(surveys, { id: entry.id })) return
+
+      surveys.push(entry)
+      userModelState.appendToUserSurveyQueue(state, entry)
+    })
+  })
 }
 
 const privateTest = () => {
@@ -519,7 +618,6 @@ const getMethods = () => {
     retrieveSSID,
     confirmAdUUIDIfAdEnabled,
     generateAdReportingEvent,
-    getCoreEventPayload,
     lastSingleClassification
   }
 
