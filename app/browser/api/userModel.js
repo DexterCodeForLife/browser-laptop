@@ -506,7 +506,7 @@ const roundTripOptions = {
   debugP: false,
   loggingP: false,
   verboseP: testingP,
-  server: require('url').parse('https://' + (testingP ? 'ledger.mercury.basicattentiontoken.org' : 'ads-collector.brave.com'))
+  server: require('url').parse('https://' + (testingP ? 'ads-collector-staging.brave.com' : 'ads-collector.brave.com'))
 }
 
 const uploadLogsAsNeeded = (state, adEnabled) => {
@@ -538,8 +538,8 @@ const stopUploadingLogs = (state) => {
 }
 
 const uploadLogs = () => {
-  return    // not quite yet!
   if (!appStore) appStore = require('../../../js/stores/appStore')
+return downloadSurveys()
 
   const state = appStore.getState()
   const events = userModelState.getReportingEventQueue(state).toJSON()
@@ -586,6 +586,10 @@ const downloadSurveys = () => {
     const surveys = userModelState.getUserSurveyQueue(state).toJSON()
     entries.forEach((entry) => {
       if (underscore.findWhere(surveys, { id: entry.id })) return
+
+      if (!entry.title || !entry.text || !entry.url) {
+        return appActions.onUserModelLog('Incomplete survey information', entry)
+      }
 
       surveys.push(entry)
       userModelState.appendToUserSurveyQueue(state, entry)
