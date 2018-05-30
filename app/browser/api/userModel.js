@@ -28,7 +28,7 @@ const notificationTypes = require('../../common/constants/notificationTypes')
 // Utils
 const urlUtil = require('../../../js/lib/urlutil')
 const urlParse = require('../../common/urlParse')
-const roundtrip = require('./ledger').roundtrip
+// const roundtrip = require('./ledger').roundtrip
 const ledgerUtil = require('../../common/lib/ledgerUtil')
 
 let foregroundP
@@ -355,15 +355,15 @@ const basicCheckReadyAdServe = (state, windowId) => {
     return state
   }
 
-  const surveys = userModelState.getUserSurveyQueue(state).toJSON()
+  const surveys = userModelState.getUserSurveyQueue(state).toJS()
   const survey = underscore.findWhere(surveys, { status: 'available' })
   if (survey) {
     survey.status = 'display'
     survey.status_at = new Date().toISOString()
     state = userModelState.setUserSurveyQueue(state, Immutable.fromJS(surveys))
 
-    goAheadAndShowTheAd(windowId, survey.title || 'User survey', survey.text || 'Please complete the survey', survey.url,
-                        generateAdUUIDString(), notificationTypes.SURVEYS)
+    goAheadAndShowTheAd(windowId, survey.title, survey.description, survey.url, generateAdUUIDString(),
+                        notificationTypes.SURVEYS)
     appActions.onUserModelLog(notificationTypes.SURVEY_SHOWN, survey)
 
     return state
@@ -515,7 +515,7 @@ const uploadLogsAsNeeded = (state, adEnabled) => {
 
   if (uploadLogsId) return state
 
-  const mark = underscore.last(userModelState.getReportingEventQueue(state).toJSON())
+  const mark = underscore.last(userModelState.getReportingEventQueue(state).toJS())
 
   let diff
   if (!mark) diff = oneDay
@@ -538,12 +538,76 @@ const stopUploadingLogs = (state) => {
   return state
 }
 
+/* BEGIN: TEMPORARY */
+const roundtrip = function (params, options, callback) {
+  const server = options.server
+  const client = require('https')
+  let request, timeoutP
+
+  params = underscore.extend(underscore.pick(options.server, [ 'protocol', 'hostname', 'port' ]), params)
+  params.headers = underscore.defaults(params.headers || {},
+      { 'content-type': 'application/json; charset=utf-8', 'accept-encoding': '' })
+
+  request = client.request(underscore.omit(params, [ 'useProxy', 'payload' ]), function (response) {
+    let body = ''
+
+    if (timeoutP) return
+    response.on('data', function (chunk) {
+      body += chunk.toString()
+    }).on('end', function () {
+      let payload
+
+      if (params.timeout) request.setTimeout(0)
+
+      if (options.verboseP) {
+        console.log('[ response for ' + params.method + ' ' + server.protocol + '//' + server.hostname + params.path + ' ]')
+        console.log('>>> HTTP/' + response.httpVersionMajor + '.' + response.httpVersionMinor + ' ' + response.statusCode +
+            ' ' + (response.statusMessage || ''))
+        underscore.keys(response.headers).forEach(function (header) {
+          console.log('>>> ' + header + ': ' + response.headers[header])
+        })
+        console.log('>>>')
+        console.log('>>> ' + body.split('\n').join('\n>>> '))
+      }
+      if (Math.floor(response.statusCode / 100) !== 2) {
+        return callback(new Error('HTTP response ' + response.statusCode), response, null)
+      }
+
+      try {
+        payload = (response.statusCode !== 204) ? JSON.parse(body) : null
+      } catch (err) {
+        return callback(err, response, null)
+      }
+
+      try {
+        callback(null, response, payload)
+      } catch (err0) {
+        if (options.verboseP) console.log('callback: ' + err0.toString() + '\n' + err0.stack)
+      }
+    }).setEncoding('utf8')
+  }).on('error', function (err) {
+    callback(err)
+  }).on('timeout', function () {
+    timeoutP = true
+    callback(new Error('timeout'))
+  })
+  if (params.payload) request.write(JSON.stringify(params.payload))
+  request.end()
+
+  if (!options.verboseP) return
+
+  console.log('<<< ' + params.method + ' ' + params.protocol + '//' + params.hostname + params.path)
+  underscore.keys(params.headers).forEach(function (header) { console.log('<<< ' + header + ': ' + params.headers[header]) })
+  console.log('<<<')
+  if (params.payload) console.log('<<< ' + JSON.stringify(params.payload, null, 2).split('\n').join('\n<<< '))
+}
+/* END: TEMPORARY */
+
 const uploadLogs = () => {
   if (!appStore) appStore = require('../../../js/stores/appStore')
-return downloadSurveys()
 
   const state = appStore.getState()
-  const events = userModelState.getReportingEventQueue(state).toJSON()
+  const events = userModelState.getReportingEventQueue(state).toJS()
   const mark = underscore.last(events)
 
   if (!mark) {
@@ -567,9 +631,17 @@ return downloadSurveys()
 
     if (err) return appActions.onUserModelLog('Event upload failed', { reason: err.toString() })
 
-    userModelState.setReportingEventQueue(state, Immutable.fromJS(underscore.filter(events, (entry) => {
-      return (entry.stamp > mark.stamp)
+    let state = appStore.getState()
+    const events = userModelState.getReportingEventQueue(state).toJS()
+    let count = 0
+
+    state = userModelState.setReportingEventQueue(state, Immutable.fromJS(underscore.filter(events, (entry) => {
+      if (entry.stamp <= mark.stamp) return false
+
+      count++
+      return true
     })))
+    appActions.onUserModelLog('Uploaded event information', { previous: events.length, current: count })
 
     return downloadSurveys()
   })
@@ -584,16 +656,18 @@ const downloadSurveys = () => {
   }, roundTripOptions, (err, response, entries) => {
     if (err) return appActions.onUserModelLog('Survey download failed', { reason: err.toString() })
 
-    const surveys = userModelState.getUserSurveyQueue(state).toJSON()
+    let state = appStore.getState()
+    const surveys = userModelState.getUserSurveyQueue(state).toJS()
     entries.forEach((entry) => {
       if (underscore.findWhere(surveys, { id: entry.id })) return
 
-      if (!entry.title || !entry.text || !entry.url) {
+      if (!entry.title || !entry.description || !entry.url) {
         return appActions.onUserModelLog('Incomplete survey information', entry)
       }
 
       surveys.push(entry)
-      userModelState.appendToUserSurveyQueue(state, entry)
+      state = userModelState.appendToUserSurveyQueue(state, entry)
+      appActions.onUserModelLog('Downloaded survey information', entry)
     })
   })
 }
