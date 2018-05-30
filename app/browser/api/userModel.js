@@ -629,9 +629,14 @@ const uploadLogs = () => {
   }, roundTripOptions, (err, response, result) => {
     if (uploadLogsId) uploadLogsId = setTimeout(() => { uploadLogs() }, err ? oneHour : oneDay)
 
-    if (err) return appActions.onUserModelLog('Event upload failed', { reason: err.toString() })
-
     let state = appStore.getState()
+
+    if (err) {
+      appActions.onUserModelLog('Event upload failed', { reason: err.toString() })
+
+      if (response.statusCode === 400) state = userModelState.setReportingEventQueue(state, Immutable.fromJS([]))
+      return downloadSurveys()
+    }
     const events = userModelState.getReportingEventQueue(state).toJS()
     let count = 0
 
