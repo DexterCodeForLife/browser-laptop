@@ -29,7 +29,6 @@ const notificationTypes = require('../../common/constants/notificationTypes')
 const urlUtil = require('../../../js/lib/urlutil')
 const urlParse = require('../../common/urlParse')
 const roundtrip = require('./ledger').roundtrip
-const ledgerUtil = require('../../common/lib/ledgerUtil')
 
 let foregroundP
 
@@ -92,27 +91,19 @@ const generateAdReportingEvent = (state, eventType, action) => {
         const tabValue = action.get('tabValue')
         const tabUrl = tabValue.get('url')
 
-        if (!tabUrl.startsWith('http://') && !tabUrl.startsWith('https://')) {
-          return state
-        }
+        if (!tabUrl.startsWith('http://') && !tabUrl.startsWith('https://')) return state
 
         map.tabId = String(tabValue.get('tabId'))
         map.tabType = 'click'
 
         const searchState = userModelState.getSearchState(state)
 
-        if (searchState) {
-          map.tabType = 'search'
-        }
-
+        if (searchState) map.tabType = 'search'
         map.tabUrl = tabUrl
 
         let classification = lastSingleClassification || []
 
-        if (!Array.isArray(classification)) {
-          classification = classification.toArray()
-        }
-
+        if (!Array.isArray(classification)) classification = classification.toArray()
         map.tabClassification = classification
 
         break
@@ -186,14 +177,17 @@ const appFocused = (state, focusP) => {
 const tabUpdate = (state, action) => {
   // nothing but update the ums for now
   state = userModelState.setLastUserActivity(state)
+
   return state
 }
 
-/* these two are pretty similar, userAction presently unused but maybe needed */
+/* presently unused but maybe needed
 const userAction = (state) => {
   state = userModelState.setUserActivity()
+
   return state
 }
+ */
 
 const removeHistorySite = (state, action) => {
   // check to see how ledger removes history
@@ -201,13 +195,14 @@ const removeHistorySite = (state, action) => {
 
   // blow it all away for now
   state = userModelState.removeAllHistory(state)
+
   return state
 }
 
 const removeAllHistory = (state) => {
   state = userModelState.removeAllHistory(state)
   state = confirmAdUUIDIfAdEnabled(state)
-  state = stopUploadingLogs(state)
+
   return state
 }
 
@@ -226,6 +221,7 @@ const testShoppingData = (state, url) => {
   } else if (hostname !== 'amazon.com' && lastShopState) {
     state = userModelState.unFlagShoppingState(state)
   }
+
   return state
 }
 
@@ -243,18 +239,18 @@ const testSearchState = (state, url) => {
   } else if (hostname !== google && lastSearchState) {
     state = userModelState.unFlagSearchState(state, url)
   }
+
   return state
 }
 
 const recordUnIdle = (state) => {
   state = userModelState.setLastUserIdleStopTime(state)
+
   return state
 }
 
 function cleanLines (x) {
-  if (x == null) {
-    return []
-  }
+  if (x == null) return []
 
   return x
     .map(x => x.split(/\s+/)) // split each: ['the quick', 'when in'] -> [['the', 'quick'], ['when', 'in']]
@@ -294,27 +290,19 @@ const classifyPage = (state, action, windowId) => {
   let body = action.getIn(['scrapedData', 'body'])
   let url = action.getIn(['scrapedData', 'url'])
 
-  if (!headers) {
-    return state
-  }
+  if (!headers) return state
 
   headers = cleanLines(headers)
   body = cleanLines(body)
 
   let words = headers.concat(body) // combine
 
-  if (words.length < um.minimumWordsToClassify) {
-    return state
-  }
+  if (words.length < um.minimumWordsToClassify) return state
 
-  if (words.length > um.maximumWordsToClassify) {
-    words = words.slice(0, um.maximumWordsToClassify)
-  }
+  if (words.length > um.maximumWordsToClassify) words = words.slice(0, um.maximumWordsToClassify)
 
   // don't do anything until our files have loaded in the background
-  if (!matrixData || !priorData) {
-    return state
-  }
+  if (!matrixData || !priorData) return state
 
   const pageScore = um.NBWordVec(words, matrixData, priorData)
 
@@ -341,9 +329,7 @@ const classifyPage = (state, action, windowId) => {
 
 const basicCheckReadyAdServe = (state, windowId) => {
 // since this is called on APP_IDLE_STATE_CHANGE, not a good idea to log here...
-  if (!priorData) {
-    return state
-  }
+  if (!priorData) return state
 
   if (!foregroundP) {
     appActions.onUserModelLog('not in foreground')
@@ -373,6 +359,7 @@ const basicCheckReadyAdServe = (state, windowId) => {
   const bundle = sampleAdFeed
   if (!bundle) {
     appActions.onUserModelLog('No ad catalog')
+
     return state
   }
 
@@ -384,6 +371,7 @@ const basicCheckReadyAdServe = (state, windowId) => {
   const category = catNames[indexOfMax]
   if (!category) {
     appActions.onUserModelLog('No category at offset indexOfMax', {indexOfMax})
+
     return state
   }
 
@@ -397,6 +385,7 @@ const basicCheckReadyAdServe = (state, windowId) => {
   }
   if (!result) {
     appActions.onUserModelLog('No ads for category', {category})
+
     return state
   }
 
@@ -404,6 +393,7 @@ const basicCheckReadyAdServe = (state, windowId) => {
   const payload = result[arbitraryKey]
   if (!payload) {
     appActions.onUserModelLog('No ad at offset for winnerOverTime', {category, winnerOverTime, arbitraryKey})
+
     return state
   }
 
@@ -425,30 +415,29 @@ const basicCheckReadyAdServe = (state, windowId) => {
   return state
 }
 
-// this needs a place where it can be called from in the reducer. when to check?
+/* presently unused but maybe needed
 const checkReadyAdServe = (state) => {
   const lastAd = userModelState.getLastServedAd(state)
   const prevAdServ = lastAd.lastadtime
   const prevAdId = lastAd.lastadserved
   const date = new Date().getTime()
   const timeSinceLastAd = date - prevAdServ
-  // make sure you're not serving one too quickly or the same one as last time
+// make sure you're not serving one too quickly or the same one as last time
   const shopping = userModelState.getShoppingState(state)
-  /* is the user shopping (this needs to be recency thing) define ad by the
-   running average class */
+// is the user shopping (this needs to be recency thing) define ad by the running average class
   const ad = 1
-  if (shopping && (ad !== prevAdId) && (timeSinceLastAd > ledgerUtil.milliseconds.hour)) {
-    serveAdNow(state, ad)
-  }
+
+  if (shopping && (ad !== prevAdId) && (timeSinceLastAd > ledgerUtil.milliseconds.hour)) serveAdNow(state, ad)
 }
 
 const serveAdNow = (state, ad) => {
-  /* do stuff which pushes the ad */
 }
+ */
 
 /* frequency a float meaning ads per day */
 const changeAdFrequency = (state, freq) => {
   state = userModelState.setAdFrequency(state, freq)
+
   return state
 }
 
@@ -471,16 +460,16 @@ const generateAdUUIDString = () => {
 
 const generateAndSetAdUUIDRegardless = (state) => {
   let uuid = generateAdUUIDString()
+
   state = userModelState.setAdUUID(state, uuid)
+
   return state
 }
 
 const generateAndSetAdUUIDButOnlyIfDNE = (state) => {
   let uuid = userModelState.getAdUUID(state)
 
-  if (typeof uuid === 'undefined') {
-    state = generateAndSetAdUUIDRegardless(state)
-  }
+  if (typeof uuid === 'undefined') state = generateAndSetAdUUIDRegardless(state)
 
   return state
 }
@@ -488,70 +477,67 @@ const generateAndSetAdUUIDButOnlyIfDNE = (state) => {
 const confirmAdUUIDIfAdEnabled = (state) => {
   let adEnabled = userModelState.getAdEnabledValue(state)
 
-  if (adEnabled) {
-    state = generateAndSetAdUUIDButOnlyIfDNE(state)
-  }
-  state = uploadLogsAsNeeded(state, adEnabled)
+  if (adEnabled) state = generateAndSetAdUUIDButOnlyIfDNE(state)
+  state = collectActivityAsNeeded(state, adEnabled)
 
   return state
 }
 
-let appStore
-let uploadLogsId
+let collectActivityId
 
-let testingP = process.env.NODE_ENV === 'test'
-testingP = true
+let testingP = (process.env.NODE_ENV === 'test') || (process.env.LEDGER_VERBOSE === 'true')
 const oneDay = (testingP ? 600 : 86400) * 1000
 const oneHour = (testingP ? 25 : 3600) * 1000
 const roundTripOptions = {
   debugP: false,
   loggingP: false,
-  verboseP: testingP,
-  server: url.parse('https://' + (testingP ? 'ads-collector-staging.brave.com' : 'ads-collector.brave.com'))
+  verboseP: process.env.LEDGER_VERBOSE === 'true',
+  server: url.parse('https://' + (testingP ? 'collector-staging.brave.com' : 'collector.brave.com'))
 }
 
-const uploadLogsAsNeeded = (state, adEnabled) => {
-  if (!adEnabled) return stopUploadingLogs(state)
+const collectActivityAsNeeded = (state, adEnabled) => {
+  if (!adEnabled) {
+    if (collectActivityId) {
+      clearTimeout(collectActivityId)
+      collectActivityId = undefined
+    }
 
-  if (uploadLogsId) return state
+    return state
+  }
+
+  if (collectActivityId) return state
 
   const mark = underscore.last(userModelState.getReportingEventQueue(state).toJS())
 
-  let diff
-  if (!mark) diff = oneDay
-  else {
+  let retryIn = oneHour
+  if (mark) {
     const now = underscore.now()
 
-    diff = now - (new Date(mark.stamp).getTime())
-    if (diff > (oneHour)) diff = oneHour
+    retryIn = now - (new Date(mark.stamp).getTime())
+    if (retryIn > oneHour) retryIn = oneHour
   }
 
-  uploadLogsId = setTimeout(() => { uploadLogs() }, diff)
+  collectActivityId = setTimeout(appActions.onUserModelCollectActivity, retryIn)
+
   return state
 }
 
-const stopUploadingLogs = (state) => {
-  if (!uploadLogsId) return state
-
-  clearTimeout(uploadLogsId)
-  uploadLogsId = undefined
-  return state
-}
-
-const uploadLogs = () => {
-  if (!appStore) appStore = require('../../../js/stores/appStore')
-
-  const state = appStore.getState()
-  const path = '/v1/ads/reports/' + userModelState.getAdUUID(state)
+const collectActivity = (state) => {
+  const path = '/v1/reports/' + userModelState.getAdUUID(state)
   const events = userModelState.getReportingEventQueue(state).toJS()
   const mark = underscore.last(events)
+  let stamp
 
   if (!mark) {
-    if (uploadLogsId) uploadLogsId = setTimeout(() => { uploadLogs() }, oneDay)
-    return downloadSurveys()
-  }
+    appActions.onUserModelUploadLogs(null, oneDay)
 
-  if (!mark.uuid) mark.uuid = uuidv4()
+    return state
+  }
+  stamp = mark.stamp
+  if (!mark.uuid) {
+    mark.uuid = uuidv4()
+    state = userModelState.setReportingEventQueue(state, Immutable.fromJS(events))
+  }
 
   roundtrip({
     method: 'PUT',
@@ -564,10 +550,6 @@ const uploadLogs = () => {
       events: events
     }
   }, roundTripOptions, (err, response, result) => {
-    if (uploadLogsId) uploadLogsId = setTimeout(() => { uploadLogs() }, err ? oneHour : oneDay)
-
-    let state = appStore.getState()
-
     if (err) {
       appActions.onUserModelLog('Event upload failed', {
         method: 'PUT',
@@ -576,54 +558,60 @@ const uploadLogs = () => {
         reason: err.toString()
       })
 
-      if (response.statusCode === 400) state = userModelState.setReportingEventQueue(state, Immutable.fromJS([]))
-      return downloadSurveys()
+      if (response.statusCode !== 400) stamp = null
     }
-    const events = userModelState.getReportingEventQueue(state).toJS()
-    let count = 0
 
-    state = userModelState.setReportingEventQueue(state, Immutable.fromJS(underscore.filter(events, (entry) => {
-      if (entry.stamp <= mark.stamp) return false
-
-      count++
-      return true
-    })))
-    appActions.onUserModelLog('Uploaded event information', { previous: events.length, current: count })
-
-    return downloadSurveys()
+    appActions.onUserModelUploadLogs(stamp, err ? oneHour : oneDay)
   })
+
+  return state
 }
 
-const downloadSurveys = () => {
-  const state = appStore.getState()
-  const path = '/v1/ads/surveys/reporter/' + userModelState.getAdUUID(state) + '?product=ads-test'
+const uploadLogs = (state, stamp, retryIn) => {
+  const events = userModelState.getReportingEventQueue(state)
+  const path = '/v1/surveys/reporter/' + userModelState.getAdUUID(state) + '?product=ads-test'
+
+  if (stamp) {
+    const data = events.some(entry => entry.stamp > stamp)
+
+    state = userModelState.setReportingEventQueue(state, data)
+    appActions.onUserModelLog('Events uploaded', { previous: state.size, current: data.size })
+  }
+
+  if (collectActivityId) collectActivityId = setTimeout(appActions.onUserModelCollectActivity, retryIn)
 
   roundtrip({
     method: 'GET',
     path: path
   }, roundTripOptions, (err, response, entries) => {
-    if (err) {
-      return appActions.onUserModelLog('Survey download failed', {
-        method: 'GET',
-        server: url.format(roundTripOptions.server),
-        path: path,
-        reason: err.toString()
-      })
-    }
-    let state = appStore.getState()
-    const surveys = userModelState.getUserSurveyQueue(state).toJS()
-    entries.forEach((entry) => {
-      if (underscore.findWhere(surveys, { id: entry.id })) return
+    if (!err) return appActions.onUserModelDownloadSurveys(entries)
 
-      if (!entry.title || !entry.description || !entry.url) {
-        return appActions.onUserModelLog('Incomplete survey information', entry)
-      }
-
-      surveys.push(entry)
-      state = userModelState.appendToUserSurveyQueue(state, entry)
-      appActions.onUserModelLog('Downloaded survey information', entry)
+    appActions.onUserModelLog('Survey download failed', {
+      method: 'GET',
+      server: url.format(roundTripOptions.server),
+      path: path,
+      reason: err.toString()
     })
   })
+
+  return state
+}
+
+const downloadSurveys = (state, entries) => {
+  const surveys = userModelState.getUserSurveyQueue(state)
+
+  entries.toJSON().forEach((entry) => {
+    if (surveys.some(survey => survey.id === entry.id)) return
+
+    if (!entry.title || !entry.description || !entry.url) {
+      return appActions.onUserModelLog('Incomplete survey information', entry)
+    }
+
+    state = userModelState.appendToUserSurveyQueue(state, entry)
+    appActions.onUserModelLog('Downloaded survey information', entry)
+  })
+
+  return state
 }
 
 const privateTest = () => {
@@ -633,25 +621,30 @@ const privateTest = () => {
 const getMethods = () => {
   const publicMethods = {
     initialize,
+    generateAdReportingEvent,
     appFocused,
     tabUpdate,
-    userAction,
     removeHistorySite,
     removeAllHistory,
-    testShoppingData,
-    saveCachedInfo,
-    testSearchState,
-    classifyPage,
-    basicCheckReadyAdServe,
-    checkReadyAdServe,
-    recordUnIdle,
-    serveAdNow,
-    changeAdFrequency,
-    goAheadAndShowTheAd,
-    retrieveSSID,
     confirmAdUUIDIfAdEnabled,
-    generateAdReportingEvent,
-    lastSingleClassification
+    testShoppingData,
+    testSearchState,
+    recordUnIdle,
+    basicCheckReadyAdServe,
+    classifyPage,
+    saveCachedInfo,
+    changeAdFrequency,
+    collectActivity,
+    uploadLogs,
+    downloadSurveys,
+    retrieveSSID
+/*
+    checkReadyAdServe,
+    serveAdNow,
+    goAheadAndShowTheAd,
+    lastSingleClassification,
+    userAction
+ */
   }
 
   let privateMethods = {}
