@@ -24,6 +24,7 @@ const Immutable = require('immutable')
 
 // Constants
 const notificationTypes = require('../../common/constants/notificationTypes')
+const searchProviders = require('../../../js/data/searchProviders').providers
 
 // Utils
 const urlUtil = require('../../../js/lib/urlutil')
@@ -226,19 +227,21 @@ const testShoppingData = (state, url) => {
 }
 
 const testSearchState = (state, url) => {
-  // const hostname = urlUtil.getHostname(url)
-  const bundle = urlParse(url)
-  const google = 'www.google.com'
-
-  const hostname = bundle.hostname
-
+  const href = urlParse(url).href
   const lastSearchState = userModelState.getSearchState(state)
-  if (hostname === google) {
-    const score = 1.0  // eventually this will be more sophisticated than if(), but google is always a search destination
-    state = userModelState.flagSearchState(state, url, score)
-  } else if (hostname !== google && lastSearchState) {
-    state = userModelState.unFlagSearchState(state, url)
+
+  // eventually this may be more sophisticated...
+  for (let provider of searchProviders) {
+    const prefix = provider.search
+    const x = prefix.indexOf('{')
+
+    if ((x <= 0) || (href.indexOf(prefix.substr(0, x)) !== 0)) continue
+
+    state = userModelState.flagSearchState(state, url, 1.0)
+    return state
   }
+
+  if (lastSearchState) state = userModelState.unFlagSearchState(state, url)
 
   return state
 }
@@ -599,9 +602,10 @@ const uploadLogs = (state, stamp, retryIn) => {
 const downloadSurveys = (state, entries) => {
   const surveys = userModelState.getUserSurveyQueue(state)
 
-  entries.toJSON().forEach((entry) => {
+  entries.forEach((entry) => {
     if (surveys.some(survey => survey.id === entry.id)) return
 
+    entry = entry.toJSON()
     if (!entry.title || !entry.description || !entry.url) {
       return appActions.onUserModelLog('Incomplete survey information', entry)
     }

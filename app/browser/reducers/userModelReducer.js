@@ -48,12 +48,6 @@ const userModelReducer = (state, action, immutableAction) => {
         state = userModel.initialize(state)
 
         state = userModel.generateAdReportingEvent(state, 'restart')
-
-        // TODO remove, only for testing
-        // setTimeout(() => {
-        //   const activeWindowId = windows.getActiveWindowId()
-        //   userModel.goAheadAndShowTheAd(activeWindowId, 'My category', 'This is text', 'https://www.google.com')
-        // }, 10000)
         break
       }
     case appConstants.APP_WINDOW_UPDATED:
