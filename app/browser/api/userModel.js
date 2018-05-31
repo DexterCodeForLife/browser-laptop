@@ -354,7 +354,6 @@ const basicCheckReadyAdServe = (state, windowId) => {
 
     return state
   }
-// MTR: put cut-out here to look for user survey to post instead...
 
   const bundle = sampleAdFeed
   if (!bundle) {
