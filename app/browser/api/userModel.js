@@ -138,6 +138,12 @@ const generateAdReportingEvent = (state, eventType, action) => {
       }
   }
 
+  let last = userModelState.getReportingEventQueue(state).last()
+  if (last) {
+    last = last.toJS()
+    last.stamp = map.stamp
+    if (underscore.isEqual(last, map)) return state
+  }
   state = userModelState.appendToReportingEventQueue(state, map)
 
   // let q = userModelState.getReportingEventQueue(state)

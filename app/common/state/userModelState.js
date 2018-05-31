@@ -397,17 +397,12 @@ const userModelState = {
 
   setUserSurveyQueue: setUserSurveyQueue,
 
-  appendToReportingEventQueue: (state, evt) => {
-    const wrappedEvent = Immutable.Map(evt)
+  appendToReportingEventQueue: (state, event) => {
     let q = getReportingEventQueue(state)
 
-    if (!Immutable.List.isList(q)) {
-      q = Immutable.List()
-    }
+    if (!Immutable.List.isList(q)) q = Immutable.List()
 
-    q = q.push(wrappedEvent)
-    state = setReportingEventQueue(state, q)
-    return state
+    return setReportingEventQueue(state, q.push(Immutable.Map(event)))
   },
 
   flushReportingEventQueue: (state) => {
